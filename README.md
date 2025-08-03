@@ -11,6 +11,65 @@ docker system prune -a --volumes -f
 docker builder prune -a -f
 ```
 
+### Types de Cache Docker
+
+#### Cache de Construction (Build Cache)
+```powershell
+# Supprimer tout le cache de construction
+docker builder prune -a -f
+
+# Voir l'utilisation du cache de construction
+docker builder du
+
+# Supprimer le cache de construction avec confirmation
+docker builder prune -a
+```
+
+#### Cache des Images
+```powershell
+# Supprimer les images non utilisées
+docker image prune -f
+
+# Supprimer toutes les images non utilisées (même celles avec des tags)
+docker image prune -a -f
+
+# Supprimer les images "dangling" (sans tag)
+docker image prune -f
+```
+
+#### Cache des Conteneurs
+```powershell
+# Supprimer tous les conteneurs arrêtés
+docker container prune -f
+
+# Supprimer un conteneur spécifique
+docker rm <container_id>
+
+# Forcer la suppression d'un conteneur en cours
+docker rm -f <container_id>
+```
+
+#### Cache des Volumes
+```powershell
+# Supprimer tous les volumes non utilisés
+docker volume prune -f
+
+# Supprimer tous les volumes (même ceux utilisés) - ATTENTION !
+docker volume prune -a -f
+
+# Supprimer un volume spécifique
+docker volume rm <volume_name>
+```
+
+#### Cache des Réseaux
+```powershell
+# Supprimer tous les réseaux non utilisés
+docker network prune -f
+
+# Supprimer un réseau spécifique
+docker network rm <network_name>
+```
+
 ### Nettoyage Projet Spécifique (Onyx)
 ```powershell
 # Arrêter et supprimer le projet Onyx avec ses volumes
@@ -40,6 +99,44 @@ docker network prune -f
 
 # 6. Nettoyage système final
 docker system prune -a --volumes -f
+```
+
+### Nettoyage Sélectif
+```powershell
+# Supprimer les images de plus de 24h
+docker image prune --filter "until=24h" -f
+
+# Supprimer les conteneurs arrêtés depuis plus de 1h
+docker container prune --filter "until=1h" -f
+
+# Supprimer les volumes non utilisés (sans confirmation)
+docker volume prune -f
+
+# Supprimer seulement les images "dangling"
+docker image prune -f
+
+# Nettoyage par projet (basé sur les labels)
+docker system prune --filter "label!=keep" -f
+```
+
+### Nettoyage Intelligent (Recommandé)
+```powershell
+# Étape 1: Diagnostic avant nettoyage
+docker system df
+
+# Étape 2: Nettoyage progressif des éléments les moins risqués
+docker container prune -f
+docker image prune -f
+docker network prune -f
+
+# Étape 3: Nettoyage du cache de construction si nécessaire
+docker builder prune -f
+
+# Étape 4: Nettoyage des volumes (ATTENTION - peut supprimer des données)
+docker volume prune -f
+
+# Étape 5: Vérification finale
+docker system df
 ```
 
 ---
@@ -112,6 +209,9 @@ docker logs -t onyx-stack-api_server-1
 # Utilisation de l'espace disque Docker
 docker system df
 
+# Utilisation détaillée de l'espace disque
+docker system df -v
+
 # Informations détaillées sur les volumes
 docker volume ls
 
@@ -123,6 +223,27 @@ docker images
 
 # Statistiques en temps réel des conteneurs
 docker stats
+```
+
+### Diagnostic du Cache Docker
+```powershell
+# Voir l'utilisation détaillée du cache de construction
+docker builder du
+
+# Historique des builds
+docker builder ls
+
+# Inspecter le cache de construction
+docker buildx du
+
+# Voir les couches d'une image
+docker history <image_name>
+
+# Analyser la taille des couches
+docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}"
+
+# Identifier les gros volumes
+docker volume ls --format "table {{.Name}}\t{{.Driver}}" | head -20
 ```
 
 ---
@@ -211,9 +332,47 @@ docker restart onyx-stack-relational_db-1
 ```powershell
 # Voir les ports utilisés
 netstat -ano | findstr :3000
+netstat -ano | findstr :5432
+netstat -ano | findstr :8080
 
 # Tuer le processus utilisant le port
 taskkill /PID <PID> /F
+```
+
+#### Problème de Base de Données PostgreSQL
+```powershell
+# Vérifier si PostgreSQL est déjà installé localement
+Get-Service -Name "*postgres*" -ErrorAction SilentlyContinue
+
+# Arrêter PostgreSQL local s'il existe
+Stop-Service -Name "postgresql*" -Force
+
+# Vérifier les logs spécifiques de la DB
+docker logs onyx-stack-relational_db-1 --tail 50
+
+# Forcer la recréation du conteneur DB
+docker compose -f docker-compose.dev.yml rm -f relational_db
+docker compose -f docker-compose.dev.yml up -d relational_db
+
+# Vérifier l'état de santé de la DB
+docker exec onyx-stack-relational_db-1 pg_isready -U postgres
+
+# Se connecter à la DB pour tester
+docker exec -it onyx-stack-relational_db-1 psql -U postgres -c "\l"
+```
+
+#### Problème de permissions Windows sur les ports
+```powershell
+# Vérifier les ports exclus par Windows
+netsh int ipv4 show excludedportrange protocol=tcp
+
+# Redémarrer Docker Desktop (en tant qu'administrateur)
+# Ou changer le port PostgreSQL dans docker-compose.dev.yml
+
+# Solution temporaire : utiliser un autre port pour PostgreSQL
+# Dans docker-compose.dev.yml, changer:
+# ports:
+#   - "5433:5432"  # au lieu de "5432:5432"
 ```
 
 #### Problème d'espace disque
